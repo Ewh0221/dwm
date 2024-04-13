@@ -175,6 +175,8 @@ struct Monitor {
 	Monitor *next;
 	Window barwin;
 	const Layout *lt[2];
+	int titlebarbegin;
+	int titlebarend;
 	Pertag *pertag;
 };
 
@@ -233,10 +235,12 @@ static void detachstack(Client *c);
 static Monitor *dirtomon(int dir);
 static void drawbar(Monitor *m);
 static void drawbars(void);
+static void drawline(int x, int y);
 static int drawstatusbar(Monitor *m, int bh, char* text);
 static void enternotify(XEvent *e);
 static void expose(XEvent *e);
 static void focus(Client *c);
+static void focusonclick(const Arg *arg);
 static void focusin(XEvent *e);
 static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
@@ -619,73 +623,76 @@ unswallow(Client *c)
 
 
 void
-buttonpress(XEvent *e)
-{
-	unsigned int i, x, click, occ = 0;
-	Arg arg = {0};
-	Client *c;
-	Monitor *m;
-	XButtonPressedEvent *ev = &e->xbutton;
+buttonpress(XEvent *e) {
+    unsigned int i, x, click, occ = 0;
+    Arg arg = {0};
+    Client *c;
+    Monitor *m;
+    XButtonPressedEvent *ev = &e->xbutton;
 
-	click = ClkRootWin;
-	/* focus monitor if necessary */
-	if ((m = wintomon(ev->window)) && m != selmon) {
-		unfocus(selmon->sel, 1);
-		selmon = m;
-		focus(NULL);
-	}
-	if (ev->window == selmon->barwin) {
-		i = x = 0;
-		for (c = m->clients; c; c = c->next)
-			occ |= c->tags == 255 ? 0 : c->tags;
-		do {
-			/* do not reserve space for vacant tags */
-			if (!(occ & 1 << i || m->tagset[m->seltags] & 1 << i))
-				continue;
-			x += TEXTW(tags[i]);
-		} while (ev->x >= x && ++i < LENGTH(tags));
-		if (i < LENGTH(tags)) {
-			click = ClkTagBar;
-			arg.ui = 1 << i;
-			/* hide preview if we click the bar */
-			if (selmon->previewshow) {
-				selmon->previewshow = 0;
-				XUnmapWindow(dpy, selmon->tagwin);
-			}
-		} else if (ev->x < x + TEXTW(selmon->ltsymbol))
-			click = ClkLtSymbol;
-		else if (ev->x > (x = selmon->ww - status2dtextlength(stext) - getsystraywidth())) {
-			click = ClkStatusText;
-
-			char *text = rawstext;
-			int i = -1;
-			char ch;
-			dwmblockssig = 0;
-			while (text[++i]) {
-				if ((unsigned char)text[i] < ' ') {
-					ch = text[i];
-					text[i] = '\0';
-					x += status2dtextlength(text);
-					text[i] = ch;
-					text += i+1;
-					i = -1;
-					if (x >= ev->x) break;
-					dwmblockssig = ch;
-				}
-			}
-		} else
-			click = ClkWinTitle;
-	} else if ((c = wintoclient(ev->window))) {
-		focus(c);
-		restack(selmon);
-		XAllowEvents(dpy, ReplayPointer, CurrentTime);
-		click = ClkClientWin;
-	}
-	for (i = 0; i < LENGTH(buttons); i++)
-		if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
-		&& CLEANMASK(buttons[i].mask) == CLEANMASK(ev->state))
-			buttons[i].func(click == ClkTagBar && buttons[i].arg.i == 0 ? &arg : &buttons[i].arg);
+    click = ClkRootWin;
+    if ((m = wintomon(ev->window)) && m != selmon) {
+        unfocus(selmon->sel, 1);
+        selmon = m;
+        focus(NULL);
+    }
+    if (ev->window == selmon->barwin) {
+        i = x = 0;
+        for (c = m->clients; c; c = c->next)
+            occ |= c->tags == 255 ? 0 : c->tags;
+        do {
+            if (!(occ & 1 << i || m->tagset[m->seltags] & 1 << i))
+                continue;
+            x += TEXTW(tags[i]);
+        } while (ev->x >= x && ++i < LENGTH(tags));
+        if (i < LENGTH(tags)) {
+            click = ClkTagBar;
+            arg.ui = 1 << i;
+            if (selmon->previewshow) {
+                selmon->previewshow = 0;
+                XUnmapWindow(dpy, selmon->tagwin);
+            }
+        } else if (ev->x < x + TEXTW(selmon->ltsymbol)) {
+            click = ClkLtSymbol;
+        } else if (ev->x > (x = selmon->ww - status2dtextlength(stext) - getsystraywidth())) {
+            click = ClkStatusText;
+            // Parse status text and signal blocks
+            char *text = rawstext;
+            int i = -1;
+            char ch;
+            dwmblockssig = 0;
+            while (text[++i]) {
+                if ((unsigned char)text[i] < ' ') {
+                    ch = text[i];
+                    text[i] = '\0';
+                    x += status2dtextlength(text);
+                    text[i] = ch;
+                    text += i+1;
+                    i = -1;
+                    if (x >= ev->x) break;
+                    dwmblockssig = ch;
+                }
+            }
+        } else {
+            click = ClkWinTitle;
+            arg.ui = ev->x;
+            focusonclick(&arg); // New integration part
+        }
+    } else if ((c = wintoclient(ev->window))) {
+        focus(c);
+        restack(selmon);
+        XAllowEvents(dpy, ReplayPointer, CurrentTime);
+        click = ClkClientWin;
+    }
+    for (i = 0; i < LENGTH(buttons); i++)
+        if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
+        && CLEANMASK(buttons[i].mask) == CLEANMASK(ev->state))
+            buttons[i].func((click == ClkTagBar || click == ClkWinTitle) && buttons[i].arg.i == 0 ? &arg : &buttons[i].arg);
 }
+
+
+
+
 
 
 
@@ -1184,9 +1191,8 @@ status2dtextlength(char* stext)
 
 
 void
-drawbar(Monitor *m)
-{
-    int x, w, sw = 0, stw = 0 , tw, mw, ew = 0;
+drawbar(Monitor *m) {
+    int x, w, sw = 0, stw = 0, tw, mw, ew = 0;
     int boxs = drw->fonts->h / 9;
     int boxw = drw->fonts->h / 6 + 2;
     unsigned int i, occ = 0, urg = 0, n = 0;
@@ -1198,9 +1204,10 @@ drawbar(Monitor *m)
     if(showsystray && m == systraytomon(m))
         stw = getsystraywidth();
 
-    /* draw status first so it can be overdrawn by tags later */
-    if (m == selmon) { /* status is only drawn on selected monitor */
+    // Draw status first so it can be overdrawn by tags later
+    if (m == selmon) { // status is only drawn on selected monitor
         sw = m->ww - drawstatusbar(m, bh, stext);
+        m->titlebarend = sw; // Set end of title bar as end of status text
     }
 
     resizebarwin(m);
@@ -1213,7 +1220,7 @@ drawbar(Monitor *m)
     }
     x = 0;
     for (i = 0; i < LENGTH(tags); i++) {
-        /* do not draw vacant tags */
+        // Do not draw vacant tags
         if (!(occ & 1 << i || m->tagset[m->seltags] & 1 << i))
             continue;
 
@@ -1225,6 +1232,8 @@ drawbar(Monitor *m)
     w = TEXTW(m->ltsymbol);
     drw_setscheme(drw, scheme[SchemeNorm]);
     x = drw_text(drw, x, 0, w, bh, lrpad / 2, m->ltsymbol, 0);
+	m->titlebarbegin = x; // Set beginning of title bar after tags
+
 
     if ((w = m->ww - sw - stw - x) > bh) {
         if (n > 0) {
@@ -1250,7 +1259,7 @@ drawbar(Monitor *m)
                 tw = MIN(m->sel == c ? w : mw, TEXTW(c->name));
 
                 drw_setscheme(drw, scheme[m->sel == c ? SchemeSel : SchemeNorm]);
-                if (tw > 0) /* trap special handling of 0 in drw_text */
+                if (tw > 0) // Trap special handling of 0 in drw_text
                     drw_text(drw, x, 0, tw, bh, lrpad / 2, c->name, 0);
                 if (c->isfloating)
                     drw_rect(drw, x + boxs, boxs, boxw, boxw, c->isfixed, 0);
@@ -1263,6 +1272,26 @@ drawbar(Monitor *m)
     }
     drw_map(drw, m->barwin, 0, 0, m->ww - stw, bh);
 }
+
+
+
+void
+drawline(int x, int y) {
+    XGCValues gcv;
+
+    // Correct access to foreground color
+    gcv.foreground = drw->scheme[ColFg].pixel;
+
+    XChangeGC(dpy, drw->gc, GCForeground, &gcv);
+
+    // Correct handling of font height. Assuming 'fonts' is the first font in the linked list if multiple fonts are not being considered.
+    int font_height = drw->fonts->xfont->ascent + drw->fonts->xfont->descent;
+
+    // Drawing the line with the correct vertical positioning based on font height
+    XDrawLine(dpy, drw->drawable, drw->gc, x, y, x, y + font_height + 2);
+}
+
+
 
 
 void
@@ -1334,6 +1363,30 @@ focus(Client *c)
 	}
 	selmon->sel = c;
 	drawbars();
+}
+
+
+void
+focusonclick(const Arg *arg) {
+    int x = selmon->titlebarbegin;
+    int clickx = arg->i; // x position of the click
+    Monitor *m = selmon;
+    Client *c, *firstvis = NULL;
+
+    // Iterate through clients to find the first visible client
+    for (c = m->clients; c; c = c->next) {
+        if (ISVISIBLE(c)) {
+            if (!firstvis) firstvis = c;
+            int w = TEXTW(c->name);
+            // Check if the click was within the width of this client's title
+            if (clickx >= x && clickx < x + w) {
+                focus(c);
+                restack(selmon);
+                return;
+            }
+            x += w;
+        }
+    }
 }
 
 /* there are some broken focus acquiring clients needing extra handling */
@@ -1902,8 +1955,7 @@ propertynotify(XEvent *e)
 		}
 		if (ev->atom == XA_WM_NAME || ev->atom == netatom[NetWMName]) {
 			updatetitle(c);
-			if (c == c->mon->sel)
-				drawbar(c->mon);
+			drawbar(c->mon);
 		}
 		if (ev->atom == netatom[NetWMWindowType])
 			updatewindowtype(c);
