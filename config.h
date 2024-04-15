@@ -57,7 +57,7 @@ static Sp scratchpads[] = {
 };
 
 /* tagging */
-static const char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+static const char *tags[] = { "󰬺", "󰬻", "󰬼", "󰬽", "󰬾", "󰬿", "󰭀", "󰭁", "󰭂" };
 
 static const Rule rules[] = {
 	/* xprop(1):
@@ -183,7 +183,9 @@ static const Key keys[] = {
 	{ MODKEY,			XK_equal,	spawn,		SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+; kill -44 $(pidof dwmblocks)") },
 	{ MODKEY|ShiftMask,		XK_equal,	spawn,		SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 15%+; kill -44 $(pidof dwmblocks)") },
 	*/
+	{ Mod1Mask, XK_Tab, spawn, SHCMD("skippy-xd --switch") },
 
+    { Mod1Mask|ShiftMask, XK_Tab, spawn, SHCMD("skippy-xd --switch-prev") },
 	{ MODKEY,			XK_BackSpace,	spawn,		SHCMD("~/.config/rofi/powermenu/type-2/powermenu.sh") },
 	{ MODKEY|ShiftMask,		XK_BackSpace,	spawn,		SHCMD("~/.config/rofi/powermenu/type-2/powermenu.sh") },
 
