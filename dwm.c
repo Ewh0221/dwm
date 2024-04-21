@@ -279,7 +279,6 @@ static void resizemouse(const Arg *arg);
 static void resizerequest(XEvent *e);
 static void restack(Monitor *m);
 static void run(void);
-static void runAutostart(void);
 static void scan(void);
 static int sendevent(Window w, Atom proto, int m, long d0,
     long d1, long d2, long d3, long d4);
@@ -719,22 +718,23 @@ buttonpress(XEvent *e) {
                 if (ISVISIBLE(c))
                     n++;
 
-            int remainingWidth = selmon->ww - x - status2dtextlength(stext) - getsystraywidth();
-            tw = remainingWidth / n; // Width per title
+            if (n > 0) {
+				int remainingWidth = selmon->ww - x - status2dtextlength(stext) - getsystraywidth();
+				tw = remainingWidth / n; // Width per title
 
-            c = m->clients;
-            do {
-                if (!c || !ISVISIBLE(c))
-                    continue;
-                x += tw;
-            } while (c && ev->x > x && (c = c->next));
+				c = m->clients;
+				do {
+					if (!c || !ISVISIBLE(c))
+						continue;
+					x += tw;
+				} while (c && ev->x > x && (c = c->next));
 
-            if (c) {
-                click = ClkWinTitle;
-                arg.v = c;
-            }
+				if (c) {
+					click = ClkWinTitle;
+					arg.v = c;
+				}
+			}
 		}
-
     } else if ((c = wintoclient(ev->window))) {
         focus(c);
         restack(selmon);
@@ -888,6 +888,7 @@ clientmessage(XEvent *e)
 		if (i < LENGTH(tags)) {
 			const Arg a = {.ui = 1 << i};
 			selmon = c->mon;
+			usleep(10000); // 10 ms
 			view(&a);
 			focus(c);
 			restack(selmon);
@@ -2436,19 +2437,18 @@ setmfact(const Arg *arg)
 	arrange(selmon);
 }
 
-showtagpreview(unsigned int i)
-{
-	if (!selmon->previewshow || !selmon->tagmap[i]) {
-		XUnmapWindow(dpy, selmon->tagwin);
-		return;
-	}
-
-	XSetWindowBackgroundPixmap(dpy, selmon->tagwin, selmon->tagmap[i]);
-	XCopyArea(dpy, selmon->tagmap[i], selmon->tagwin, drw->gc, 0, 0,
-			selmon->mw / scalepreview, selmon->mh / scalepreview,
-			0, 0);
-	XSync(dpy, False);
-	XMapRaised(dpy, selmon->tagwin);
+void
+showtagpreview(unsigned int i) {
+    Monitor *m = selmon;  
+    if (!m->previewshow || !m->tagmap[i]) {
+        XUnmapWindow(dpy, m->tagwin);
+        return;
+    }
+    XSetWindowBackgroundPixmap(dpy, m->tagwin, m->tagmap[i]);
+    XCopyArea(dpy, m->tagmap[i], m->tagwin, drw->gc, 0, 0,
+              m->mw / scalepreview, m->mh / scalepreview, 0, 0);
+    XSync(dpy, False);
+    XMapRaised(dpy, m->tagwin);
 }
 
 void

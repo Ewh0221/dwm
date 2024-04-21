@@ -52,7 +52,6 @@ static const char *const autostart[] = {
     "thunderbird", NULL,
     "discord", "--start-minimized", NULL,
     "sh", "-c", "export GTK_THEME=Arc-BLACKEST", NULL,
-    "sh", "-c", "set_monitor", NULL,
     "sh", "-c", "changeAudio &", NULL,
     "sh", "-c", "skippy-xd --start-daemon", NULL,
     NULL
