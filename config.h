@@ -22,6 +22,8 @@ static const int showsystray        = 1;        /* 0 means no systray */
 static int swallowfloating    = 0;        /* 1 means swallow floating windows by default */
 static int smartgaps          = 0;        /* 1 means no outer gap when there is only one window */
 static int showbar            = 1;        /* 0 means no bar */
+#define ICONSIZE 35   /* icon size */
+#define ICONSPACING 2 /* space between icon and title */
 static int topbar             = 1;        /* 0 means bottom bar */
 static char *fonts[]          = { "MesloLGS NF:size=12", "NotoColorEmoji:pixelsize=26:antialias=true:autohint=true"  };
 static char normbgcolor[]           = "#222222";
