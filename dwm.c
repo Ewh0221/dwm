@@ -2055,25 +2055,32 @@ propertynotify(XEvent *e) {
 }
 
 
-void
-quit(const Arg *arg)
-{	
+void quit(const Arg *arg)
+{
+    size_t i;
 
-	size_t i;
+    if (autostart_pids != NULL) {
+        for (i = 0; i < autostart_len; i++) {
+            if (autostart_pids[i] > 0) {
+                kill(autostart_pids[i], SIGTERM);
+                int status;
+                pid_t result = waitpid(autostart_pids[i], &status, WNOHANG); // Non-blocking wait
+                if (result == 0) {
+                    // Process did not exit immediately, might need to be killed with SIGKILL
+                    kill(autostart_pids[i], SIGKILL);
+                    waitpid(autostart_pids[i], &status, 0); // Ensure it's reaped
+                }
+            }
+        }
+        free(autostart_pids);
+        autostart_pids = NULL;
+    }
 
-	/* kill child processes */
-	for (i = 0; i < autostart_len; i++) {
-		if (0 < autostart_pids[i]) {
-			kill(autostart_pids[i], SIGTERM);
-			waitpid(autostart_pids[i], NULL, 0);
-		}
-	}
-
-
-
-	if(arg->i) restart = 1;
-	running = 0;
+    if(arg->i) restart = 1;
+    running = 0;
 }
+
+
 
 Monitor *
 recttomon(int x, int y, int w, int h)
