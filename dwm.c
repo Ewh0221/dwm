@@ -59,6 +59,7 @@
                                * MAX(0, MIN((y)+(h),(m)->wy+(m)->wh) - MAX((y),(m)->wy)))
 #define ISINC(X)                ((X) > 1000 && (X) < 3000)
 #define ISVISIBLE(C)            ((C->tags & C->mon->tagset[C->mon->seltags]) || C->issticky)
+#define HIDDEN(C)               ((getstate(C->win) == IconicState))
 #define PREVSEL                 3000
 #define LENGTH(X)               (sizeof X / sizeof X[0])
 #define MOUSEMASK               (BUTTONMASK|PointerMotionMask)
@@ -90,7 +91,7 @@
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
-enum { SchemeNorm, SchemeSel }; /* color schemes */
+enum { SchemeNorm, SchemeSel, SchemeHid }; /* color schemes */
 enum { NetSupported, NetWMName, NetWMState, NetWMCheck,
       NetSystemTray, NetSystemTrayOP, NetSystemTrayOrientation,
       NetSystemTrayOrientationHorz,
@@ -158,6 +159,8 @@ struct Monitor {
 	int nmaster;
 	int num;
 	int by;               /* bar geometry */
+	int btw;              /* width of tasks portion of bar */
+	int bt;               /* number of tasks */
 	int mx, my, mw, mh;   /* screen size */
 	int wx, wy, ww, wh;   /* window area  */
 	int gappih;           /* horizontal gap between windows */
@@ -240,7 +243,6 @@ static int drawstatusbar(Monitor *m, int bh, char* text);
 static void enternotify(XEvent *e);
 static void expose(XEvent *e);
 static void focus(Client *c);
-static void focusonclick(const Arg *arg);
 static void focusin(XEvent *e);
 static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
@@ -308,6 +310,7 @@ static void togglesticky(const Arg *arg);
 static void togglefullscr(const Arg *arg);
 static void toggletag(const Arg *arg);
 static void toggleview(const Arg *arg);
+static void togglewin(const Arg *arg);
 static void unfocus(Client *c, int setfocus);
 static void unmanage(Client *c, int destroyed);
 static void unmapnotify(XEvent *e);
@@ -674,10 +677,28 @@ buttonpress(XEvent *e) {
                 }
             }
         } else {
-            click = ClkWinTitle;
-            arg.ui = ev->x;
-            focusonclick(&arg); // New integration part
-        }
+			int n = 0, tw = 0;
+            x = TEXTW(tags[i]) + TEXTW(selmon->ltsymbol); // Adjust to start after last tag and symbol
+            for (c = m->clients; c; c = c->next)
+                if (ISVISIBLE(c))
+                    n++;
+
+            int remainingWidth = selmon->ww - x - status2dtextlength(stext) - getsystraywidth();
+            tw = remainingWidth / n; // Width per title
+
+            c = m->clients;
+            do {
+                if (!c || !ISVISIBLE(c))
+                    continue;
+                x += tw;
+            } while (c && ev->x > x && (c = c->next));
+
+            if (c) {
+                click = ClkWinTitle;
+                arg.v = c;
+            }
+		}
+
     } else if ((c = wintoclient(ev->window))) {
         focus(c);
         restack(selmon);
@@ -687,9 +708,8 @@ buttonpress(XEvent *e) {
     for (i = 0; i < LENGTH(buttons); i++)
         if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
         && CLEANMASK(buttons[i].mask) == CLEANMASK(ev->state))
-            buttons[i].func((click == ClkTagBar || click == ClkWinTitle) && buttons[i].arg.i == 0 ? &arg : &buttons[i].arg);
+			buttons[i].func((click == ClkTagBar || click == ClkWinTitle) && buttons[i].arg.i == 0 ? &arg : &buttons[i].arg);
 }
-
 
 
 
@@ -1199,10 +1219,10 @@ status2dtextlength(char* stext)
 
 void
 drawbar(Monitor *m) {
-    int x, w, sw = 0, stw = 0, tw, mw, ew = 0;
+    int x, w, sw = 0, stw = 0, tw = 0, n = 0;
     int boxs = drw->fonts->h / 9;
     int boxw = drw->fonts->h / 6 + 2;
-    unsigned int i, occ = 0, urg = 0, n = 0;
+    unsigned int i, occ = 0, urg = 0;
     Client *c;
 
     if(!m->showbar)
@@ -1214,7 +1234,6 @@ drawbar(Monitor *m) {
     // Draw status first so it can be overdrawn by tags later
     if (m == selmon) { // status is only drawn on selected monitor
         sw = m->ww - drawstatusbar(m, bh, stext);
-        m->titlebarend = sw; // Set end of title bar as end of status text
     }
 
     resizebarwin(m);
@@ -1227,7 +1246,6 @@ drawbar(Monitor *m) {
     }
     x = 0;
     for (i = 0; i < LENGTH(tags); i++) {
-        // Do not draw vacant tags
         if (!(occ & 1 << i || m->tagset[m->seltags] & 1 << i))
             continue;
 
@@ -1239,44 +1257,32 @@ drawbar(Monitor *m) {
     w = TEXTW(m->ltsymbol);
     drw_setscheme(drw, scheme[SchemeNorm]);
     x = drw_text(drw, x, 0, w, bh, lrpad / 2, m->ltsymbol, 0);
-	m->titlebarbegin = x; // Set beginning of title bar after tags
-
 
     if ((w = m->ww - sw - stw - x) > bh) {
         if (n > 0) {
-            tw = TEXTW(m->sel->name) + lrpad;
-            mw = (tw >= w || n == 1) ? 0 : (w - tw) / (n - 1);
-
-            i = 0;
-            for (c = m->clients; c; c = c->next) {
-                if (!ISVISIBLE(c) || c == m->sel)
-                    continue;
-                tw = TEXTW(c->name);
-                if(tw < mw)
-                    ew += (mw - tw);
-                else
-                    i++;
-            }
-            if (i > 0)
-                mw += ew / i;
-
+            int tabw = w / n;
+            int remainder = w % n;
             for (c = m->clients; c; c = c->next) {
                 if (!ISVISIBLE(c))
                     continue;
-                tw = MIN(m->sel == c ? w : mw, TEXTW(c->name));
 
+                if (remainder > 0) {
+                    tabw++;
+                    remainder--;
+                } else if (remainder == 0) {
+                    tabw--;
+                }
                 drw_setscheme(drw, scheme[m->sel == c ? SchemeSel : SchemeNorm]);
-                if (tw > 0) // Trap special handling of 0 in drw_text
-                    drw_text(drw, x, 0, tw, bh, lrpad / 2, c->name, 0);
-                if (c->isfloating)
-                    drw_rect(drw, x + boxs, boxs, boxw, boxw, c->isfixed, 0);
-                x += tw;
-                w -= tw;
+                drw_text(drw, x, 0, tabw, bh, lrpad / 2, c->name, 0);
+                x += tabw;
             }
+        } else {
+            drw_setscheme(drw, scheme[SchemeNorm]);
+            drw_rect(drw, x, 0, w, bh, 1, 1);
         }
-        drw_setscheme(drw, scheme[SchemeNorm]);
-        drw_rect(drw, x, 0, w, bh, 1, 1);
     }
+	m->bt = n;
+	m->btw = w;
     drw_map(drw, m->barwin, 0, 0, m->ww - stw, bh);
 }
 
@@ -1373,28 +1379,7 @@ focus(Client *c)
 }
 
 
-void
-focusonclick(const Arg *arg) {
-    int x = selmon->titlebarbegin;
-    int clickx = arg->i; // x position of the click
-    Monitor *m = selmon;
-    Client *c, *firstvis = NULL;
 
-    // Iterate through clients to find the first visible client
-    for (c = m->clients; c; c = c->next) {
-        if (ISVISIBLE(c)) {
-            if (!firstvis) firstvis = c;
-            int w = TEXTW(c->name);
-            // Check if the click was within the width of this client's title
-            if (clickx >= x && clickx < x + w) {
-                focus(c);
-                restack(selmon);
-                return;
-            }
-            x += w;
-        }
-    }
-}
 
 /* there are some broken focus acquiring clients needing extra handling */
 void
@@ -2742,6 +2727,18 @@ toggleview(const Arg *arg)
 		arrange(selmon);
 	}
 }
+
+
+
+void
+togglewin(const Arg *arg)
+{
+    Client *c = (Client*)arg->v;
+	focus(c);
+	restack(selmon);
+}
+
+
 
 void
 unfocus(Client *c, int setfocus)

@@ -34,6 +34,7 @@ static char *colors[][3] = {
        /*               fg           bg           border   */
        [SchemeNorm] = { normfgcolor, normbgcolor, normbordercolor },
        [SchemeSel]  = { selfgcolor,  selbgcolor,  selbordercolor  },
+	   [SchemeHid]  = { selfgcolor,  selbgcolor,  selbordercolor  },
 };
 
 typedef struct {
@@ -411,8 +412,8 @@ static const Button buttons[] = {
 	{ ClkClientWin,         MODKEY,         Button3,        resizemouse,    {0} },
 	{ ClkClientWin,		MODKEY,		Button4,	incrgaps,	{.i = +1} },
 	{ ClkClientWin,		MODKEY,		Button5,	incrgaps,	{.i = -1} },
-	{ ClkWinTitle,          0,              Button1,        focusonclick,   {0} },
 	{ ClkTagBar,            0,              Button1,        view,           {0} },
+	{ ClkWinTitle,          0,              Button1,        togglewin,      {0} },
 	{ ClkTagBar,            0,              Button3,        toggleview,     {0} },
 	{ ClkTagBar,            MODKEY,         Button1,        tag,            {0} },
 	{ ClkTagBar,            MODKEY,         Button3,        toggletag,      {0} },
