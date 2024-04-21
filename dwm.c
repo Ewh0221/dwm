@@ -2477,6 +2477,8 @@ takepreview(void)
 		XUnmapWindow(dpy, selmon->tagwin);
 		XSync(dpy, False);
 
+		usleep(2500); /* 2.5ms */
+
 		if (!(image = imlib_create_image(sw, sh))) {
 			fprintf(stderr, "dwm: imlib: failed to create image, skipping.");
 			continue;
