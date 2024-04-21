@@ -39,6 +39,26 @@ static char *colors[][3] = {
 	   [SchemeHid]  = { selfgcolor,  selbgcolor,  selbordercolor  },
 };
 
+static const char *const autostart[] = {
+    "sh", "-c", "nitrogen --restore", NULL,
+    "sh", "-c", "xrdb -merge ~/.Xresources", NULL,
+    "dwmblocks", NULL,
+    "picom", "--backend", "glx", NULL,
+    "dunst", NULL,
+    "tuxedo-control-center", "--tray", NULL,
+    "nm-applet", NULL,
+    "blueman-applet", NULL,
+    "sh", "-c", "dbus-update-activation-environment --all", NULL,
+    "thunderbird", NULL,
+    "discord", "--start-minimized", NULL,
+    "sh", "-c", "export GTK_THEME=Arc-BLACKEST", NULL,
+    "sh", "-c", "set_monitor", NULL,
+    "sh", "-c", "changeAudio &", NULL,
+    "sh", "-c", "skippy-xd --start-daemon", NULL,
+    NULL
+};
+
+
 typedef struct {
 	const char *name;
 	const void *cmd;
