@@ -884,14 +884,41 @@ clientmessage(XEvent *e)
 			setfullscreen(c, (cme->data.l[0] == 1 /* _NET_WM_STATE_ADD    */
 				|| (cme->data.l[0] == 2 /* _NET_WM_STATE_TOGGLE */ && !c->isfullscreen)));
 	} else if (cme->message_type == netatom[NetActiveWindow]) {
-		for (i = 0; i < LENGTH(tags) && !((1 << i) & c->tags); i++);
-		if (i < LENGTH(tags)) {
-			const Arg a = {.ui = 1 << i};
-			selmon = c->mon;
-			usleep(10000); // 10 ms
-			view(&a);
+		// Check if the client is a scratchpad
+		unsigned int scratchtag = 0;
+		for (i = 0; i < LENGTH(scratchpads); i++) {
+			if (c->tags & SPTAG(i)) {
+				scratchtag = SPTAG(i);
+				break;
+			}
+		}
+
+		if (scratchtag) {
+			// Ensure the scratchpad is on the current monitor
+			if (c->mon != selmon) {
+				sendmon(c, selmon);
+			}
+			
+			// Focus the scratchpad and toggle on if not visible
+			if (!ISVISIBLE(c)) {
+				selmon->tagset[selmon->seltags] |= scratchtag;
+				arrange(selmon);
+			}
 			focus(c);
 			restack(selmon);
+		} else {
+			// Normal behavior for other windows
+			for (i = 0; i < LENGTH(tags) && !((1 << i) & c->tags); i++);
+			if (i < LENGTH(tags)) {
+				const Arg a = {.ui = 1 << i};
+				if (c->mon != selmon) {
+					sendmon(c, selmon);
+				}
+				selmon = c->mon;
+				view(&a);
+				focus(c);
+				restack(selmon);
+			}
 		}
 	}
 }
@@ -2281,19 +2308,37 @@ scan(void)
 void
 sendmon(Client *c, Monitor *m)
 {
-	if (c->mon == m)
-		return;
-	unfocus(c, 1);
-	detach(c);
-	detachstack(c);
-	c->mon = m;
-	c->tags = m->tagset[m->seltags]; /* assign tags of target monitor */
-	attachbottom(c);
-	attachstack(c);
-	setclienttagprop(c);
-	focus(NULL);
-	arrange(NULL);
+    if (c->mon == m)
+        return;
+
+    unfocus(c, 1);
+    detach(c);
+    detachstack(c);
+
+    unsigned int scratchtag = 0;
+    // Check if this client is a scratchpad
+    for (int i = 0; i < LENGTH(scratchpads); i++) {
+        if (c->tags & SPTAG(i)) {
+            scratchtag = c->tags;  // If it is, preserve its scratchpad tag
+            break;
+        }
+    }
+
+    c->mon = m;
+    if (scratchtag) {
+        c->tags = scratchtag;  // Use the preserved tag if it's a scratchpad
+    } else {
+        c->tags = m->tagset[m->seltags];  // Otherwise, use the active tag set of the destination monitor
+    }
+
+    attachbottom(c);
+    attachstack(c);
+    setclienttagprop(c); // Ensure this function is flexible enough to handle both cases
+
+    focus(NULL);
+    arrange(NULL);
 }
+
 
 void
 setclientstate(Client *c, long state)
@@ -2477,7 +2522,7 @@ takepreview(void)
 		XUnmapWindow(dpy, selmon->tagwin);
 		XSync(dpy, False);
 
-		usleep(2500); /* 2.5ms */
+		usleep(5000); /* 5ms */
 
 		if (!(image = imlib_create_image(sw, sh))) {
 			fprintf(stderr, "dwm: imlib: failed to create image, skipping.");
@@ -2786,27 +2831,47 @@ togglesticky(const Arg *arg)
 void
 togglescratch(const Arg *arg)
 {
-	Client *c;
-	unsigned int found = 0;
-	unsigned int scratchtag = SPTAG(arg->ui);
-	Arg sparg = {.v = scratchpads[arg->ui].cmd};
+    Client *c;
+    Monitor *m;
+    unsigned int found = 0;
+    unsigned int scratchtag = SPTAG(arg->ui);
+    Arg sparg = {.v = scratchpads[arg->ui].cmd};
 
-	for (c = selmon->clients; c && !(found = c->tags & scratchtag); c = c->next);
-	if (found) {
-		unsigned int newtagset = selmon->tagset[selmon->seltags] ^ scratchtag;
-		if (newtagset) {
-			selmon->tagset[selmon->seltags] = newtagset;
-			focus(NULL);
-			arrange(selmon);
-		}
-		if (ISVISIBLE(c)) {
-			focus(c);
-			restack(selmon);
-		}
-	} else {
-		selmon->tagset[selmon->seltags] |= scratchtag;
-		spawn(&sparg);
-	}
+    // Check all monitors and clients for the scratchpad
+    for (m = mons; m; m = m->next) {
+        for (c = m->clients; c; c = c->next) {
+            if (c->tags & scratchtag) {
+                found = 1; // Found the scratchpad client
+                break;
+            }
+        }
+        if (found) break;
+    }
+
+    if (found && c) {
+        if (m != selmon) {
+            // If scratchpad is found on another monitor, send it to the current monitor
+            sendmon(c, selmon);
+			selmon->tagset[selmon->seltags] |= scratchtag;
+        }
+        else if (!ISVISIBLE(c)) {
+            // Ensure the scratchpad tag is visible on the current monitor
+            selmon->tagset[selmon->seltags] |= scratchtag;
+        } else {
+            // Toggle scratchpad visibility off if it's currently visible
+            selmon->tagset[selmon->seltags] ^= scratchtag;
+        }
+        focus(NULL);
+        arrange(selmon);
+        if (ISVISIBLE(c)) {
+            focus(c);
+            restack(selmon);
+        }
+    } else {
+        // If not found, spawn it on the current monitor
+        selmon->tagset[selmon->seltags] |= scratchtag; // Add scratchpad tag to current tagset
+        spawn(&sparg);
+    }
 }
 
 void
