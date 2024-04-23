@@ -432,14 +432,16 @@ static const Button buttons[] = {
 	{ ClkClientWin,         MODKEY,         Button1,        movemouse,      {0} },
 	{ ClkClientWin,         MODKEY,         Button2,        defaultgaps,	{0} },
 	{ ClkClientWin,         MODKEY,         Button3,        resizemouse,    {0} },
-	{ ClkClientWin,		MODKEY,		Button4,	incrgaps,	{.i = +1} },
-	{ ClkClientWin,		MODKEY,		Button5,	incrgaps,	{.i = -1} },
+	{ ClkClientWin,			MODKEY,			Button4,		incrgaps,		{.i = +1} },
+	{ ClkClientWin,			MODKEY,			Button5,		incrgaps,		{.i = -1} },
 	{ ClkTagBar,            0,              Button1,        view,           {0} },
+	{ ClkLtSymbol,          0,              Button1,        cyclelayout,    {.i = +1} }, // Existing or add if not present
+ 	{ ClkLtSymbol,          0,              Button3,        cyclelayout,    {.i = -1} }, // Existing or add if not present
 	{ ClkWinTitle,          0,              Button1,        togglewin,      {0} },
 	{ ClkTagBar,            0,              Button3,        toggleview,     {0} },
 	{ ClkTagBar,            MODKEY,         Button1,        tag,            {0} },
 	{ ClkTagBar,            MODKEY,         Button3,        toggletag,      {0} },
-	{ ClkTagBar,		0,		Button4,	shiftview,	{.i = -1} },
-	{ ClkTagBar,		0,		Button5,	shiftview,	{.i = 1} },
-	{ ClkRootWin,		0,		Button2,	togglebar,	{0} },
+	{ ClkTagBar,			0,				Button4,		shiftview,		{.i = -1} },
+	{ ClkTagBar,			0,				Button5,		shiftview,		{.i = 1} },
+	{ ClkRootWin,			0,				Button2,		togglebar,		{0} },
 };
