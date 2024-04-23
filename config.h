@@ -54,6 +54,7 @@ static const char *const autostart[] = {
     "sh", "-c", "export GTK_THEME=Arc-BLACKEST", NULL,
     "sh", "-c", "changeAudio &", NULL,
     "sh", "-c", "skippy-xd --start-daemon", NULL,
+	"unclutter", NULL,
     NULL
 };
 

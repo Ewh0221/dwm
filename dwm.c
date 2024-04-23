@@ -1470,6 +1470,8 @@ focusmon(const Arg *arg)
 	unfocus(selmon->sel, 0);
 	selmon = m;
 	focus(NULL);
+	if (selmon->sel)
+		XWarpPointer(dpy, None, selmon->sel->win, 0, 0, 0, 0, selmon->sel->w/2, selmon->sel->h/2);
 }
 
 void
@@ -1485,6 +1487,7 @@ focusstack(const Arg *arg)
 	    i -= ISVISIBLE(c) ? 1 : 0, p = c, c = c->next);
 	focus(c ? c : p);
 	restack(selmon);
+	XWarpPointer(dpy, None, c->win, 0, 0, 0, 0, c->w/2, c->h/2);
 }
 
 Atom
@@ -1835,6 +1838,8 @@ manage(Window w, XWindowAttributes *wa)
 	if (term)
 		swallow(term, c);
 	arrange(c->mon);
+	if (c && c->mon == selmon)
+		XWarpPointer(dpy, None, c->win, 0, 0, 0, 0, c->w/2, c->h/2);
 	focus(NULL);
 }
 
@@ -3002,6 +3007,9 @@ unmanage(Client *c, int destroyed)
 		arrange(m);
 		focus(NULL);
 		updateclientlist();
+		if (m == selmon && m->sel)
+			XWarpPointer(dpy, None, m->sel->win, 0, 0, 0, 0,
+			             m->sel->w/2, m->sel->h/2);
 	}
 }
 
